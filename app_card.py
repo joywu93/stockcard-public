@@ -8,7 +8,7 @@ import requests
 import os
 import base64
 
-# 嘗試載入富邦 SDK，若無安裝則標記為不可用
+# 嘗試載入富邦 SDK
 try:
     from fubon_neo.sdk import FubonSDK
     FUBON_AVAILABLE = True
@@ -29,7 +29,36 @@ def get_val(obj, key):
         return obj.get(key)
     return getattr(obj, key, None)
 
-# 🛡️ 核心雙引擎擷取功能
+# 📖 建立自動字典：從政府公開資料抓取代號與名稱對照表 (每天快取更新一次)
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_stock_dict():
+    name_to_code = {}
+    code_to_name = {}
+    try:
+        # 抓取上市股票清單
+        twse = requests.get("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL", timeout=5).json()
+        for item in twse:
+            code = str(item.get('Code', '')).strip()
+            name = str(item.get('Name', '')).strip()
+            if code and name:
+                name_to_code[name] = code
+                code_to_name[code] = name
+    except:
+        pass
+    try:
+        # 抓取上櫃股票清單
+        tpex = requests.get("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes", timeout=5).json()
+        for item in tpex:
+            code = str(item.get('SecuritiesCompanyCode', '')).strip()
+            name = str(item.get('CompanyName', '')).strip()
+            if code and name:
+                name_to_code[name] = code
+                code_to_name[code] = name
+    except:
+        pass
+    return name_to_code, code_to_name
+
+# 🛡️ 核心雙引擎擷取功能 (加入自動補幀機制)
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_stock_data(ticker):
     session = requests.Session()
@@ -38,9 +67,9 @@ def fetch_stock_data(ticker):
     })
     
     df = pd.DataFrame()
-    data_source = "yahoo" # 預設資料來源為 Yahoo
+    data_source = "yahoo" 
+    stock_name = ""
     
-    # 基礎引擎：Yahoo 歷史 K 線
     try:
         df = yf.Ticker(f"{ticker}.TW", session=session).history(period="2y", auto_adjust=False)
     except Exception:
@@ -57,63 +86,94 @@ def fetch_stock_data(ticker):
         df = df.dropna(subset=['Close'])
         df['Volume'] = df['Volume'].fillna(0)
         
-        # 🚀 渦輪引擎：富邦 API (憑證隱身術版本)
+        # 🚀 渦輪引擎：富邦 API
         if FUBON_AVAILABLE and "fubon" in st.secrets:
             try:
                 sdk = FubonSDK()
-                
-                # 從保險箱讀取文字並還原成憑證檔案
                 if "cert_base64" in st.secrets["fubon"]:
                     cert_data = base64.b64decode(st.secrets["fubon"]["cert_base64"])
                     cert_path = "temp_cert.p12" 
                     with open(cert_path, "wb") as f:
                         f.write(cert_data)
                         
-                    # 登入與點火
                     sdk.login(st.secrets["fubon"]["id"], st.secrets["fubon"]["password"], cert_path, st.secrets["fubon"]["cert_password"])
                     sdk.init_realtime() 
                     
-                    # 抓取即時報價並精準拆解
                     stock_info = sdk.marketdata.rest_client.stock.intraday.quote(symbol=ticker)
+                    
                     c_price = get_val(stock_info, 'closePrice')
                     h_price = get_val(stock_info, 'highPrice')
                     l_price = get_val(stock_info, 'lowPrice')
-                    
+                    o_price = get_val(stock_info, 'openPrice')
+                    f_name = get_val(stock_info, 'name') # 抓取富邦的股票名稱
+                    if f_name:
+                        stock_name = f_name
+                        
                     total_obj = get_val(stock_info, 'total')
                     t_vol = get_val(total_obj, 'tradeVolume')
+                    f_date = get_val(stock_info, 'date')
                     
                     if c_price is not None and t_vol is not None:
-                        df.iloc[-1, df.columns.get_loc('Close')] = float(c_price)
-                        df.iloc[-1, df.columns.get_loc('High')] = float(h_price)
-                        df.iloc[-1, df.columns.get_loc('Low')] = float(l_price)
-                        df.iloc[-1, df.columns.get_loc('Volume')] = float(t_vol) * 1000
+                        if not o_price:
+                            o_price = c_price
+                            
+                        # 💡 自動補幀：解決早盤 Yahoo 15 分鐘延遲問題
+                        last_yahoo_date = df.index[-1].strftime("%Y-%m-%d")
+                        if f_date and str(f_date) > last_yahoo_date:
+                            new_idx = pd.to_datetime(f_date)
+                            if df.index.tz is not None:
+                                new_idx = new_idx.tz_localize(df.index.tz)
+                            
+                            df.loc[new_idx] = df.iloc[-1].copy()
+                            df.loc[new_idx, 'Open'] = float(o_price)
+                            df.loc[new_idx, 'High'] = float(h_price)
+                            df.loc[new_idx, 'Low'] = float(l_price)
+                            df.loc[new_idx, 'Close'] = float(c_price)
+                            df.loc[new_idx, 'Volume'] = float(t_vol) * 1000
+                        else:
+                            df.iloc[-1, df.columns.get_loc('Close')] = float(c_price)
+                            df.iloc[-1, df.columns.get_loc('High')] = float(h_price)
+                            df.iloc[-1, df.columns.get_loc('Low')] = float(l_price)
+                            df.iloc[-1, df.columns.get_loc('Volume')] = float(t_vol) * 1000
+                            
                         data_source = "fubon" 
                         
-                    # 刪除暫時憑證檔
                     if os.path.exists(cert_path):
                         os.remove(cert_path)
             except Exception:
                 pass
                 
-        return df, data_source
+        return df, data_source, stock_name
     else:
-        return None, None
+        return None, None, ""
 
-# 📱 輸入區塊
-ticker_input = st.text_input("🔍 請輸入台股代號 (例如: 2330, 0050, 00929)", "2330").strip()
+# 📱 輸入區塊 (支援代號與名稱搜尋)
+ticker_input = st.text_input("🔍 請輸入台股代號或名稱 (例如: 2330, 台積電, 2408)", "2330").strip()
 submit_btn = st.button("產生圖卡 🚀", use_container_width=True, type="primary")
 
 st.write("") 
 
 if submit_btn or ticker_input:
-    match = re.search(r'\d{4,5}', ticker_input)
-    if not match:
-        st.warning("⚠️ 請輸入正確的 4~5 碼台股代號！")
+    # 判斷輸入的是代號還是中文名稱
+    name_to_code, code_to_name = get_stock_dict()
+    target_code = None
+    
+    if re.match(r'^\d{4,5}$', ticker_input):
+        target_code = ticker_input
     else:
-        t = match.group()
+        target_code = name_to_code.get(ticker_input)
+
+    if not target_code:
+        st.error(f"❌ 找不到「{ticker_input}」的代號，請確認名稱是否正確 (需輸入完整簡稱，例如: 台積電)。")
+    else:
+        t = target_code
         with st.spinner(f"正在擷取 {t} 戰略數據..."):
             
-            df, data_source = fetch_stock_data(t)
+            df, data_source, stock_name = fetch_stock_data(t)
+            
+            # 若富邦沒抓到名稱，從自動字典補上
+            if not stock_name:
+                stock_name = code_to_name.get(t, "")
             
             if df is None:
                 st.error("⚠️ 資料庫目前過於繁忙或限制了連線。請稍等 1~2 分鐘後，再重新整理網頁試試看！")
@@ -170,9 +230,12 @@ if submit_btn or ticker_input:
                         st.warning("⚠️ **目前顯示為 Yahoo 基礎報價**：非即時連線，股價與實際盤中狀態可能會有時間落差。")
                     
                     # --- 圖卡視覺化呈現 ---
+                    # 💡 在標題區塊同時顯示代號與名稱
+                    display_title = f"【代號：{t} {stock_name}】" if stock_name else f"【代號：{t}】"
+                    
                     success_html = f"""
                     <div style="background-color: #d1e7dd; border: 1px solid #badbcc; border-radius: 8px; padding: 12px; text-align: center; margin-bottom: 16px;">
-                        <div style="color: #0f5132; font-size: 18px; font-weight: bold;">【代號：{t}】</div>
+                        <div style="color: #0f5132; font-size: 18px; font-weight: bold;">{display_title}</div>
                         <div style="color: #0f5132; font-size: 18px; font-weight: bold; margin-top: 4px;">最新戰略圖卡</div>
                         <div style="color: #0f5132; font-size: 12px; margin-top: 6px; font-weight: normal;">🔄 數據含 {last_date_str} 最新價，SMA動態滾動中</div>
                     </div>
@@ -184,7 +247,6 @@ if submit_btn or ticker_input:
                     
                     with c1:
                         st.metric("最新收盤價", f"${curr_price:.2f}", f"{price_change:+.2f} ({change_pct:+.2f}%)")
-                        # 補回：高低均價小區塊
                         st.markdown(f"""
                         <div style="display: flex; justify-content: space-between; font-size: 11px; color: #6c757d; background-color: #f8f9fa; padding: 4px; border-radius: 4px; margin-top: -10px; border: 1px solid #e9ecef;">
                             <span>高 <span style="color:#333; font-weight:bold;">{high_price:.1f}</span></span>
@@ -212,7 +274,6 @@ if submit_btn or ticker_input:
                         
                         st.metric("明日5日扣抵價", f"${turn_price_tomorrow:.2f}", f"目前5均線 {turn_status}", delta_color=delta_color)
 
-                    # 補回：戰略解說區塊
                     st.info(strategy_text)
                     
                     st.write("---")
@@ -303,8 +364,6 @@ if submit_btn or ticker_input:
                     st.markdown(ma_html, unsafe_allow_html=True)
                     
                     st.write("")
-                    
-                    # 補回：最下方的中長線位階判定
                     trend_msg = "目前股價位階： "
                     if curr_price > ma60 and curr_price > ma20:
                         trend_msg += "🔥 **多頭排列** (站上月線與季線，趨勢偏多)"
