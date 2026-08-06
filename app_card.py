@@ -198,7 +198,7 @@ if submit_btn or ticker_input:
                 
                 b3, b5, b10, b20, b60 = [((curr_price - m) / m) * 100 for m in (ma3, ma5, ma10, ma20, ma60)]
                 
-                # --- 📊 新增：5日 KD 計算 ---
+                # --- 📊 新增：5日 KD 計算與昨日對比 ---
                 low_min = df['Low'].rolling(window=5).min()
                 high_max = df['High'].rolling(window=5).max()
                 rsv = (df['Close'] - low_min) / (high_max - low_min) * 100
@@ -211,6 +211,7 @@ if submit_btn or ticker_input:
                     d_list[i] = (2/3) * d_list[i-1] + (1/3) * k_list[i]
                     
                 k_val, d_val = k_list[-1], d_list[-1]
+                prev_k_val, prev_d_val = k_list[-2], d_list[-2] # 取得昨天的數值
                 
                 # --- 動態顯示資料來源警告 ---
                 if data_source == "yahoo":
@@ -230,13 +231,12 @@ if submit_btn or ticker_input:
                 
                 c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
                 
-                # 統一使用客製化 HTML，鎖定字體 1.8rem
                 with c1:
                     c1_html = f"""
                     <div style="padding-top: 0.2rem; padding-bottom: 0.5rem;">
                         <div style="font-size: 13px; color: var(--text-color); opacity: 0.7; margin-bottom: 4px;">最新價 / 即時量</div>
                         <div style="font-size: 1.8rem; font-weight: 700; color: var(--text-color); margin-bottom: 2px;">
-                            ${curr_price:.2f} <span style="font-size: 1.1rem; opacity: 0.7; font-weight: 400;">/ {int(volume.iloc[-1] / 1000):,}張</span>
+                            ${curr_price:.2f} <span style="font-size: 1.1rem; opacity: 0.7; font-weight: 400;">/ {int(volume.iloc[-1] / 1000):,}</span>
                         </div>
                         <div style="font-size: 14px; color: {'#d9534f' if price_change >=0 else '#5cb85c'};">
                             {'↑' if price_change >=0 else '↓'} {abs(price_change):.2f} ({change_pct:+.2f}%)
@@ -290,6 +290,7 @@ if submit_btn or ticker_input:
                     st.markdown(c3_html, unsafe_allow_html=True)
 
                 with c4:
+                    # KD 邏輯判定
                     if k_val >= 80:
                         kd_status, kd_desc = "🔥 高檔超買", f"K值來到 {k_val:.1f}，短線有過熱跡象，需留意獲利了結賣壓。"
                     elif k_val <= 20:
@@ -298,17 +299,24 @@ if submit_btn or ticker_input:
                         kd_status, kd_desc = "📈 短線偏多", "K值大於D值 (黃金交叉)，動能偏向多方，適合順勢操作。"
                     else:
                         kd_status, kd_desc = "📉 短線偏弱", "K值小於D值 (死亡交叉)，動能偏向空方，需提高風險意識。"
-                        
-                    kd_icon = "↑" if k_val > d_val else "↓"
-                    kd_color = "#d9534f" if k_val > d_val else "#5cb85c"
+                    
+                    # 計算與昨日相比的趨勢與顏色
+                    k_icon = "↑" if k_val >= prev_k_val else "↓"
+                    k_color = "#d9534f" if k_val >= prev_k_val else "#5cb85c"
+                    
+                    d_icon = "↑" if d_val >= prev_d_val else "↓"
+                    d_color = "#d9534f" if d_val >= prev_d_val else "#5cb85c"
+                    
+                    kd_status_color = "#d9534f" if k_val >= d_val else "#5cb85c"
                     
                     c4_html = f"""
                     <div style="padding-top: 0.2rem; padding-bottom: 0.5rem;">
                         <div style="font-size: 13px; color: var(--text-color); opacity: 0.7; margin-bottom: 4px;">5日 K/D 值</div>
                         <div style="font-size: 1.8rem; font-weight: 700; color: var(--text-color); margin-bottom: 2px;">
-                            {k_val:.1f} <span style="font-size: 1.1rem; opacity: 0.7; font-weight: 400;">/ {d_val:.1f} <span style="color: {kd_color}; font-weight: 700;">{kd_icon}</span></span>
+                            {k_val:.1f} <span style="font-size: 1.1rem; color: {k_color}; font-weight: 700;">{k_icon}</span>
+                            <span style="font-size: 1.1rem; opacity: 0.7; font-weight: 400;">/ {d_val:.1f} <span style="color: {d_color}; font-weight: 700;">{d_icon}</span></span>
                         </div>
-                        <div style="font-size: 14px; color: {kd_color};">
+                        <div style="font-size: 14px; color: {kd_status_color};">
                             {kd_status}
                         </div>
                     </div>
