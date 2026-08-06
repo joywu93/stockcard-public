@@ -56,7 +56,7 @@ def get_stock_dict():
         pass
     return name_to_code, code_to_name
 
-# 🛡️ 核心雙引擎擷取功能 (含自動補幀)
+# 🛡️ 核心雙引擎擷取功能 (含自動補幀 & 大盤指數雙引擎)
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_stock_data(ticker):
     session = requests.Session()
@@ -67,24 +67,43 @@ def fetch_stock_data(ticker):
     df = pd.DataFrame()
     data_source = "yahoo" 
     stock_name = ""
+    index_data = {'TWSE': None, 'OTC': None}
     
+    # --- 1. 大盤指數 (Yahoo 備援引擎先打底) ---
+    yahoo_twse_ref, yahoo_otc_ref = None, None
+    try:
+        tw_df = yf.Ticker("^TWII", session=session).history(period="5d")
+        if len(tw_df) >= 2:
+            c, ref = tw_df['Close'].iloc[-1], tw_df['Close'].iloc[-2]
+            yahoo_twse_ref = ref
+            index_data['TWSE'] = {'price': c, 'change': c - ref, 'pct': (c - ref)/ref * 100}
+            
+        otc_df = yf.Ticker("^TWOII", session=session).history(period="5d")
+        if len(otc_df) >= 2:
+            c, ref = otc_df['Close'].iloc[-1], otc_df['Close'].iloc[-2]
+            yahoo_otc_ref = ref
+            index_data['OTC'] = {'price': c, 'change': c - ref, 'pct': (c - ref)/ref * 100}
+    except:
+        pass
+
+    # --- 2. 個股歷史資料 (Yahoo) ---
     try:
         df = yf.Ticker(f"{ticker}.TW", session=session).history(period="2y", auto_adjust=False)
-    except Exception:
+    except:
         pass
         
     if df.empty:
         time.sleep(1)
         try:
             df = yf.Ticker(f"{ticker}.TWO", session=session).history(period="2y", auto_adjust=False)
-        except Exception:
+        except:
             pass
 
     if not df.empty:
         df = df.dropna(subset=['Close'])
         df['Volume'] = df['Volume'].fillna(0)
         
-        # 🚀 渦輪引擎：富邦 API
+        # --- 3. 🚀 渦輪引擎：富邦 API (個股 + 大盤) ---
         if FUBON_AVAILABLE and "fubon" in st.secrets:
             try:
                 sdk = FubonSDK()
@@ -97,6 +116,23 @@ def fetch_stock_data(ticker):
                     sdk.login(st.secrets["fubon"]["id"], st.secrets["fubon"]["password"], cert_path, st.secrets["fubon"]["cert_password"])
                     sdk.init_realtime() 
                     
+                    # 抓取大盤即時報價 (富邦優先)
+                    try:
+                        twse_info = sdk.marketdata.rest_client.stock.intraday.quote(symbol="TWSE.FS")
+                        if twse_info:
+                            c = float(get_val(twse_info, 'closePrice'))
+                            ref = yahoo_twse_ref if yahoo_twse_ref else float(get_val(twse_info, 'previousClose') or get_val(twse_info, 'referencePrice') or c)
+                            index_data['TWSE'] = {'price': c, 'change': c - ref, 'pct': ((c - ref)/ref * 100) if ref else 0}
+                            
+                        otc_info = sdk.marketdata.rest_client.stock.intraday.quote(symbol="OTC.TW")
+                        if otc_info:
+                            c = float(get_val(otc_info, 'closePrice'))
+                            ref = yahoo_otc_ref if yahoo_otc_ref else float(get_val(otc_info, 'previousClose') or get_val(otc_info, 'referencePrice') or c)
+                            index_data['OTC'] = {'price': c, 'change': c - ref, 'pct': ((c - ref)/ref * 100) if ref else 0}
+                    except:
+                        pass
+                    
+                    # 抓取個股即時報價
                     stock_info = sdk.marketdata.rest_client.stock.intraday.quote(symbol=ticker)
                     
                     c_price = get_val(stock_info, 'closePrice')
@@ -112,8 +148,7 @@ def fetch_stock_data(ticker):
                     f_date = get_val(stock_info, 'date')
                     
                     if c_price is not None and t_vol is not None:
-                        if not o_price:
-                            o_price = c_price
+                        if not o_price: o_price = c_price
                             
                         # 自動補幀
                         last_yahoo_date = df.index[-1].strftime("%Y-%m-%d")
@@ -138,12 +173,12 @@ def fetch_stock_data(ticker):
                         
                     if os.path.exists(cert_path):
                         os.remove(cert_path)
-            except Exception:
+            except:
                 pass
                 
-        return df, data_source, stock_name
+        return df, data_source, stock_name, index_data
     else:
-        return None, None, ""
+        return None, None, "", index_data
 
 # 📱 輸入區塊
 ticker_input = st.text_input("🔍 請輸入台股代號或名稱 (例如: 2330, 台積電, 2408)", "2330").strip()
@@ -156,12 +191,12 @@ if submit_btn or ticker_input:
     target_code = ticker_input if re.match(r'^\d{4,5}$', ticker_input) else name_to_code.get(ticker_input)
 
     if not target_code:
-        st.error(f"❌ 找不到「{ticker_input}」的代號，請確認名稱是否正確 (需輸入完整簡稱，例如: 台積電)。")
+        st.error(f"❌ 找不到「{ticker_input}」的代號，請確認名稱是否正確。")
     else:
         t = target_code
         with st.spinner(f"正在擷取 {t} 戰略數據..."):
             
-            df, data_source, stock_name = fetch_stock_data(t)
+            df, data_source, stock_name, index_data = fetch_stock_data(t)
             if not stock_name:
                 stock_name = code_to_name.get(t, "")
             
@@ -198,7 +233,7 @@ if submit_btn or ticker_input:
                 
                 b3, b5, b10, b20, b60 = [((curr_price - m) / m) * 100 for m in (ma3, ma5, ma10, ma20, ma60)]
                 
-                # --- 📊 新增：5日 KD 計算與昨日對比 ---
+                # --- 📊 5日 KD 計算 ---
                 low_min = df['Low'].rolling(window=5).min()
                 high_max = df['High'].rolling(window=5).max()
                 rsv = (df['Close'] - low_min) / (high_max - low_min) * 100
@@ -211,7 +246,7 @@ if submit_btn or ticker_input:
                     d_list[i] = (2/3) * d_list[i-1] + (1/3) * k_list[i]
                     
                 k_val, d_val = k_list[-1], d_list[-1]
-                prev_k_val, prev_d_val = k_list[-2], d_list[-2] # 取得昨天的數值
+                prev_k_val, prev_d_val = k_list[-2], d_list[-2] 
                 
                 # --- 動態顯示資料來源警告 ---
                 if data_source == "yahoo":
@@ -227,7 +262,26 @@ if submit_btn or ticker_input:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                st.markdown("##### 🎯 短線動能觀測")
+                # --- 📈 大盤指數動態呈現 ---
+                idx_html = ""
+                if index_data['TWSE']:
+                    p = index_data['TWSE']
+                    color = "#d9534f" if p['change'] >= 0 else "#5cb85c"
+                    icon = "↑" if p['change'] >= 0 else "↓"
+                    idx_html += f"加權 <span style='color:{color}; font-weight:bold;'>{p['price']:,.2f} ({icon}{abs(p['change']):.2f} / {p['pct']:+.2f}%)</span>"
+                    
+                if index_data['OTC']:
+                    p = index_data['OTC']
+                    color = "#d9534f" if p['change'] >= 0 else "#5cb85c"
+                    icon = "↑" if p['change'] >= 0 else "↓"
+                    idx_html += f"&nbsp;&nbsp;&nbsp;櫃買 <span style='color:{color}; font-weight:bold;'>{p['price']:,.2f} ({icon}{abs(p['change']):.2f} / {p['pct']:+.2f}%)</span>"
+
+                st.markdown(f"""
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; border-bottom: 1px solid #e9ecef; padding-bottom: 8px;">
+                    <div style="font-size: 1.25rem; font-weight: 600;">🎯 短線動能觀測</div>
+                    <div style="font-size: 0.85rem; color: #6c757d;">{idx_html}</div>
+                </div>
+                """, unsafe_allow_html=True)
                 
                 c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
                 
@@ -290,7 +344,6 @@ if submit_btn or ticker_input:
                     st.markdown(c3_html, unsafe_allow_html=True)
 
                 with c4:
-                    # KD 邏輯判定
                     if k_val >= 80:
                         kd_status, kd_desc = "🔥 高檔超買", f"K值來到 {k_val:.1f}，短線有過熱跡象，需留意獲利了結賣壓。"
                     elif k_val <= 20:
@@ -300,13 +353,10 @@ if submit_btn or ticker_input:
                     else:
                         kd_status, kd_desc = "📉 短線偏弱", "K值小於D值 (死亡交叉)，動能偏向空方，需提高風險意識。"
                     
-                    # 計算與昨日相比的趨勢與顏色
                     k_icon = "↑" if k_val >= prev_k_val else "↓"
                     k_color = "#d9534f" if k_val >= prev_k_val else "#5cb85c"
-                    
                     d_icon = "↑" if d_val >= prev_d_val else "↓"
                     d_color = "#d9534f" if d_val >= prev_d_val else "#5cb85c"
-                    
                     kd_status_color = "#d9534f" if k_val >= d_val else "#5cb85c"
                     
                     c4_html = f"""
@@ -323,10 +373,8 @@ if submit_btn or ticker_input:
                     """
                     st.markdown(c4_html, unsafe_allow_html=True)
 
-                # 依序顯示戰略解說
                 st.info(strategy_text)
-                kd_strategy_text = f"💡 **KD 戰略**：{kd_status}。{kd_desc}"
-                st.info(kd_strategy_text)
+                st.info(f"💡 **KD 戰略**：{kd_status}。{kd_desc}")
                 
                 st.write("---")
                 st.markdown("##### 📈 近三個月均線糾結與走勢")
