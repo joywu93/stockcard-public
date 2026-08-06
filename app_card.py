@@ -56,7 +56,7 @@ def get_stock_dict():
         pass
     return name_to_code, code_to_name
 
-# 🛡️ 核心雙引擎擷取功能 (含自動補幀 & 大盤指數雙引擎)
+# 🛡️ 核心雙引擎擷取功能 (含自動補幀 & 大盤+台積電雙引擎)
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_stock_data(ticker):
     session = requests.Session()
@@ -67,10 +67,10 @@ def fetch_stock_data(ticker):
     df = pd.DataFrame()
     data_source = "yahoo" 
     stock_name = ""
-    index_data = {'TWSE': None, 'OTC': None}
+    index_data = {'TWSE': None, 'OTC': None, 'TSMC': None}
     
-    # --- 1. 大盤指數 (Yahoo 備援引擎先打底) ---
-    yahoo_twse_ref, yahoo_otc_ref = None, None
+    # --- 1. 大盤指數與台積電 (Yahoo 備援引擎先打底) ---
+    yahoo_twse_ref, yahoo_otc_ref, yahoo_tsmc_ref = None, None, None
     try:
         tw_df = yf.Ticker("^TWII", session=session).history(period="5d")
         if len(tw_df) >= 2:
@@ -83,6 +83,12 @@ def fetch_stock_data(ticker):
             c, ref = otc_df['Close'].iloc[-1], otc_df['Close'].iloc[-2]
             yahoo_otc_ref = ref
             index_data['OTC'] = {'price': c, 'change': c - ref, 'pct': (c - ref)/ref * 100}
+            
+        tsmc_df = yf.Ticker("2330.TW", session=session).history(period="5d")
+        if len(tsmc_df) >= 2:
+            c, ref = tsmc_df['Close'].iloc[-1], tsmc_df['Close'].iloc[-2]
+            yahoo_tsmc_ref = ref
+            index_data['TSMC'] = {'price': c, 'change': c - ref, 'pct': (c - ref)/ref * 100}
     except:
         pass
 
@@ -103,7 +109,7 @@ def fetch_stock_data(ticker):
         df = df.dropna(subset=['Close'])
         df['Volume'] = df['Volume'].fillna(0)
         
-        # --- 3. 🚀 渦輪引擎：富邦 API (個股 + 大盤) ---
+        # --- 3. 🚀 渦輪引擎：富邦 API (個股 + 大盤 + 台積電) ---
         if FUBON_AVAILABLE and "fubon" in st.secrets:
             try:
                 sdk = FubonSDK()
@@ -116,7 +122,7 @@ def fetch_stock_data(ticker):
                     sdk.login(st.secrets["fubon"]["id"], st.secrets["fubon"]["password"], cert_path, st.secrets["fubon"]["cert_password"])
                     sdk.init_realtime() 
                     
-                    # 抓取大盤即時報價 (富邦優先)
+                    # 抓取大盤與台積電即時報價 (富邦優先)
                     try:
                         twse_info = sdk.marketdata.rest_client.stock.intraday.quote(symbol="TWSE.FS")
                         if twse_info:
@@ -129,6 +135,12 @@ def fetch_stock_data(ticker):
                             c = float(get_val(otc_info, 'closePrice'))
                             ref = yahoo_otc_ref if yahoo_otc_ref else float(get_val(otc_info, 'previousClose') or get_val(otc_info, 'referencePrice') or c)
                             index_data['OTC'] = {'price': c, 'change': c - ref, 'pct': ((c - ref)/ref * 100) if ref else 0}
+                            
+                        tsmc_info = sdk.marketdata.rest_client.stock.intraday.quote(symbol="2330")
+                        if tsmc_info:
+                            c = float(get_val(tsmc_info, 'closePrice'))
+                            ref = yahoo_tsmc_ref if yahoo_tsmc_ref else float(get_val(tsmc_info, 'previousClose') or get_val(tsmc_info, 'referencePrice') or c)
+                            index_data['TSMC'] = {'price': c, 'change': c - ref, 'pct': ((c - ref)/ref * 100) if ref else 0}
                     except:
                         pass
                     
@@ -262,7 +274,7 @@ if submit_btn or ticker_input:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # --- 📈 大盤指數動態呈現 ---
+                # --- 📈 大盤與台積電即時指數動態呈現 ---
                 idx_html = ""
                 if index_data['TWSE']:
                     p = index_data['TWSE']
@@ -270,16 +282,22 @@ if submit_btn or ticker_input:
                     icon = "↑" if p['change'] >= 0 else "↓"
                     idx_html += f"加權 <span style='color:{color}; font-weight:bold;'>{p['price']:,.2f} ({icon}{abs(p['change']):.2f} / {p['pct']:+.2f}%)</span>"
                     
+                if index_data['TSMC']:
+                    p = index_data['TSMC']
+                    color = "#d9534f" if p['change'] >= 0 else "#5cb85c"
+                    icon = "↑" if p['change'] >= 0 else "↓"
+                    idx_html += f"&nbsp;&nbsp;台積電 <span style='color:{color}; font-weight:bold;'>{p['price']:,.0f} ({icon}{abs(p['change']):.0f} / {p['pct']:+.2f}%)</span>"
+
                 if index_data['OTC']:
                     p = index_data['OTC']
                     color = "#d9534f" if p['change'] >= 0 else "#5cb85c"
                     icon = "↑" if p['change'] >= 0 else "↓"
-                    idx_html += f"&nbsp;&nbsp;&nbsp;櫃買 <span style='color:{color}; font-weight:bold;'>{p['price']:,.2f} ({icon}{abs(p['change']):.2f} / {p['pct']:+.2f}%)</span>"
+                    idx_html += f"&nbsp;&nbsp;櫃買 <span style='color:{color}; font-weight:bold;'>{p['price']:,.2f} ({icon}{abs(p['change']):.2f} / {p['pct']:+.2f}%)</span>"
 
                 st.markdown(f"""
                 <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; border-bottom: 1px solid #e9ecef; padding-bottom: 8px;">
                     <div style="font-size: 1.25rem; font-weight: 600;">🎯 短線動能觀測</div>
-                    <div style="font-size: 0.85rem; color: #6c757d;">{idx_html}</div>
+                    <div style="font-size: 0.82rem; color: #6c757d;">{idx_html}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
