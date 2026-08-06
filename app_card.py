@@ -228,11 +228,10 @@ if submit_btn or ticker_input:
                 
                 st.markdown("##### 🎯 短線動能觀測")
                 
-                # 改為 4 欄位佈局，讓空間分配更完美
                 c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
                 
+                # 統一使用客製化 HTML，鎖定字體 1.8rem
                 with c1:
-                    # 💡 客製化 HTML：縮小字體並結合收盤價與即時總量
                     c1_html = f"""
                     <div style="padding-top: 0.2rem; padding-bottom: 0.5rem;">
                         <div style="font-size: 13px; color: var(--text-color); opacity: 0.7; margin-bottom: 4px;">最新價 / 即時量</div>
@@ -255,26 +254,42 @@ if submit_btn or ticker_input:
                     """, unsafe_allow_html=True)
                     
                 with c2:
-                    st.metric("5日均量 (張)", f"{int(v_ma5):,} 張")
+                    c2_html = f"""
+                    <div style="padding-top: 0.2rem; padding-bottom: 0.5rem;">
+                        <div style="font-size: 13px; color: var(--text-color); opacity: 0.7; margin-bottom: 4px;">5日均量 (張)</div>
+                        <div style="font-size: 1.8rem; font-weight: 700; color: var(--text-color); margin-bottom: 2px;">
+                            {int(v_ma5):,}
+                        </div>
+                        <div style="font-size: 14px; opacity: 0;">-</div> 
+                    </div>
+                    """
+                    st.markdown(c2_html, unsafe_allow_html=True)
                     
                 with c3:
                     if ma5 > ma5_prev:
-                        turn_status, delta_color = "向上", "normal"
+                        turn_status, turn_color, turn_icon = "向上", "#d9534f", "↑"
                         strategy_text = f"💡 **均線戰略**：5日線目前 **向上**。明天收盤只要站穩 **${turn_price_tomorrow:.2f}**，就能繼續維持強勢。"
                     elif ma5 < ma5_prev:
-                        turn_status, delta_color = "下彎", "inverse"
+                        turn_status, turn_color, turn_icon = "下彎", "#5cb85c", "↓"
                         strategy_text = f"💡 **均線戰略**：5日線目前 **下彎**。明天收盤必須大於 **${turn_price_tomorrow:.2f}**，才能扭轉向上翻揚。"
                     else:
-                        turn_status, delta_color = "持平", "off"
+                        turn_status, turn_color, turn_icon = "持平", "gray", "-"
                         strategy_text = f"💡 **均線戰略**：5日線目前 **持平**。明天收盤需大於 **${turn_price_tomorrow:.2f}**，才會向上翻揚。"
                     
-                    st.metric("明日5日扣抵", f"${turn_price_tomorrow:.2f}", f"5均線 {turn_status}", delta_color=delta_color)
+                    c3_html = f"""
+                    <div style="padding-top: 0.2rem; padding-bottom: 0.5rem;">
+                        <div style="font-size: 13px; color: var(--text-color); opacity: 0.7; margin-bottom: 4px;">明日5日扣抵</div>
+                        <div style="font-size: 1.8rem; font-weight: 700; color: var(--text-color); margin-bottom: 2px;">
+                            ${turn_price_tomorrow:.2f}
+                        </div>
+                        <div style="font-size: 14px; color: {turn_color};">
+                            {turn_icon} 5均線 {turn_status}
+                        </div>
+                    </div>
+                    """
+                    st.markdown(c3_html, unsafe_allow_html=True)
 
                 with c4:
-                    # 💡 顯示 KD 數據 (delta_color="off" 隱藏箭頭，單純顯示 D 值)
-                    st.metric("5日 K 值", f"{k_val:.1f}", f"D值 {d_val:.1f}", delta_color="off")
-                    
-                    # KD 邏輯判定
                     if k_val >= 80:
                         kd_status, kd_desc = "🔥 高檔超買", f"K值來到 {k_val:.1f}，短線有過熱跡象，需留意獲利了結賣壓。"
                     elif k_val <= 20:
@@ -284,10 +299,25 @@ if submit_btn or ticker_input:
                     else:
                         kd_status, kd_desc = "📉 短線偏弱", "K值小於D值 (死亡交叉)，動能偏向空方，需提高風險意識。"
                         
-                    kd_strategy_text = f"💡 **KD 戰略**：{kd_status}。{kd_desc}"
+                    kd_icon = "↑" if k_val > d_val else "↓"
+                    kd_color = "#d9534f" if k_val > d_val else "#5cb85c"
+                    
+                    c4_html = f"""
+                    <div style="padding-top: 0.2rem; padding-bottom: 0.5rem;">
+                        <div style="font-size: 13px; color: var(--text-color); opacity: 0.7; margin-bottom: 4px;">5日 K/D 值</div>
+                        <div style="font-size: 1.8rem; font-weight: 700; color: var(--text-color); margin-bottom: 2px;">
+                            {k_val:.1f} <span style="font-size: 1.1rem; opacity: 0.7; font-weight: 400;">/ {d_val:.1f} <span style="color: {kd_color}; font-weight: 700;">{kd_icon}</span></span>
+                        </div>
+                        <div style="font-size: 14px; color: {kd_color};">
+                            {kd_status}
+                        </div>
+                    </div>
+                    """
+                    st.markdown(c4_html, unsafe_allow_html=True)
 
                 # 依序顯示戰略解說
                 st.info(strategy_text)
+                kd_strategy_text = f"💡 **KD 戰略**：{kd_status}。{kd_desc}"
                 st.info(kd_strategy_text)
                 
                 st.write("---")
