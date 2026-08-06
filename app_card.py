@@ -274,30 +274,61 @@ if submit_btn or ticker_input:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # --- 📈 大盤與台積電即時指數動態呈現 ---
+                # --- 📈 大盤與台積電即時指數動態呈現 (加入 RWD 響應式設計) ---
                 idx_html = ""
                 if index_data['TWSE']:
                     p = index_data['TWSE']
                     color = "#d9534f" if p['change'] >= 0 else "#5cb85c"
                     icon = "↑" if p['change'] >= 0 else "↓"
-                    idx_html += f"加權 <span style='color:{color}; font-weight:bold;'>{p['price']:,.2f} ({icon}{abs(p['change']):.2f} / {p['pct']:+.2f}%)</span>"
+                    idx_html += f"<span style='white-space: nowrap;'>加權 <span style='color:{color}; font-weight:bold;'>{p['price']:,.2f} ({icon}{abs(p['change']):.2f} / {p['pct']:+.2f}%)</span></span>"
                     
                 if index_data['TSMC']:
                     p = index_data['TSMC']
                     color = "#d9534f" if p['change'] >= 0 else "#5cb85c"
                     icon = "↑" if p['change'] >= 0 else "↓"
-                    idx_html += f"&nbsp;&nbsp;台積電 <span style='color:{color}; font-weight:bold;'>{p['price']:,.0f} ({icon}{abs(p['change']):.0f} / {p['pct']:+.2f}%)</span>"
+                    idx_html += f"<span style='margin-left: 8px; white-space: nowrap;'>台積電 <span style='color:{color}; font-weight:bold;'>{p['price']:,.0f} ({icon}{abs(p['change']):.0f} / {p['pct']:+.2f}%)</span></span>"
 
                 if index_data['OTC']:
                     p = index_data['OTC']
                     color = "#d9534f" if p['change'] >= 0 else "#5cb85c"
                     icon = "↑" if p['change'] >= 0 else "↓"
-                    idx_html += f"&nbsp;&nbsp;櫃買 <span style='color:{color}; font-weight:bold;'>{p['price']:,.2f} ({icon}{abs(p['change']):.2f} / {p['pct']:+.2f}%)</span>"
+                    idx_html += f"<span style='margin-left: 8px; white-space: nowrap;'>櫃買 <span style='color:{color}; font-weight:bold;'>{p['price']:,.2f} ({icon}{abs(p['change']):.2f} / {p['pct']:+.2f}%)</span></span>"
 
+                # 💡 CSS 響應式排版修正：手機版自動折疊排列
                 st.markdown(f"""
-                <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; border-bottom: 1px solid #e9ecef; padding-bottom: 8px;">
-                    <div style="font-size: 1.25rem; font-weight: 600;">🎯 短線動能觀測</div>
-                    <div style="font-size: 0.82rem; color: #6c757d;">{idx_html}</div>
+                <style>
+                .market-header-container {{
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-end;
+                    margin-bottom: 10px;
+                    border-bottom: 1px solid #e9ecef;
+                    padding-bottom: 8px;
+                }}
+                .market-header-title {{
+                    font-size: 1.25rem; 
+                    font-weight: 600;
+                    white-space: nowrap;
+                }}
+                .market-header-indices {{
+                    font-size: 0.82rem; 
+                    color: #6c757d; 
+                    text-align: right;
+                }}
+                @media (max-width: 650px) {{
+                    .market-header-container {{
+                        flex-direction: column;
+                        align-items: flex-start;
+                        gap: 6px;
+                    }}
+                    .market-header-indices {{
+                        text-align: left;
+                    }}
+                }}
+                </style>
+                <div class="market-header-container">
+                    <div class="market-header-title">🎯 短線動能觀測</div>
+                    <div class="market-header-indices">{idx_html}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
