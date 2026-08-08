@@ -56,7 +56,7 @@ def get_stock_dict():
         pass
     return name_to_code, code_to_name
 
-# 🛡️ 核心雙引擎擷取功能 (含自動補幀 & 大盤+台積電雙引擎)
+# 🛡️ 核心雙引擎擷取功能 (含自動補幀 & 大盤+台積電雙引擎 & 指數支援)
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_stock_data(ticker):
     session = requests.Session()
@@ -68,6 +68,9 @@ def fetch_stock_data(ticker):
     data_source = "yahoo" 
     stock_name = ""
     index_data = {'TWSE': None, 'OTC': None, 'TSMC': None}
+    
+    # 判斷是否為指數通道
+    is_index = ticker.startswith("^")
     
     # --- 1. 大盤指數與台積電 (Yahoo 備援引擎先打底) ---
     yahoo_twse_ref, yahoo_otc_ref, yahoo_tsmc_ref = None, None, None
@@ -92,24 +95,29 @@ def fetch_stock_data(ticker):
     except:
         pass
 
-    # --- 2. 個股歷史資料 (Yahoo) ---
-    try:
-        df = yf.Ticker(f"{ticker}.TW", session=session).history(period="2y", auto_adjust=False)
-    except:
-        pass
-        
-    if df.empty:
-        time.sleep(1)
+    # --- 2. 主角歷史資料 (Yahoo) ---
+    if is_index:
+        yahoo_sym = ticker
+        fubon_sym = "TWSE.FS" if ticker == "^TWII" else "OTC.TW"
         try:
-            df = yf.Ticker(f"{ticker}.TWO", session=session).history(period="2y", auto_adjust=False)
-        except:
-            pass
+            df = yf.Ticker(yahoo_sym, session=session).history(period="2y", auto_adjust=False)
+        except: pass
+    else:
+        fubon_sym = ticker
+        try:
+            df = yf.Ticker(f"{ticker}.TW", session=session).history(period="2y", auto_adjust=False)
+        except: pass
+        if df.empty:
+            time.sleep(1)
+            try:
+                df = yf.Ticker(f"{ticker}.TWO", session=session).history(period="2y", auto_adjust=False)
+            except: pass
 
     if not df.empty:
         df = df.dropna(subset=['Close'])
         df['Volume'] = df['Volume'].fillna(0)
         
-        # --- 3. 🚀 渦輪引擎：富邦 API (個股 + 大盤 + 台積電) ---
+        # --- 3. 🚀 渦輪引擎：富邦 API ---
         if FUBON_AVAILABLE and "fubon" in st.secrets:
             try:
                 sdk = FubonSDK()
@@ -122,7 +130,7 @@ def fetch_stock_data(ticker):
                     sdk.login(st.secrets["fubon"]["id"], st.secrets["fubon"]["password"], cert_path, st.secrets["fubon"]["cert_password"])
                     sdk.init_realtime() 
                     
-                    # 抓取大盤與台積電即時報價 (富邦優先)
+                    # 抓取上方小字的大盤與台積電即時報價
                     try:
                         twse_info = sdk.marketdata.rest_client.stock.intraday.quote(symbol="TWSE.FS")
                         if twse_info:
@@ -144,8 +152,8 @@ def fetch_stock_data(ticker):
                     except:
                         pass
                     
-                    # 抓取個股即時報價
-                    stock_info = sdk.marketdata.rest_client.stock.intraday.quote(symbol=ticker)
+                    # 抓取目前輸入的主角 (個股或大盤) 即時報價
+                    stock_info = sdk.marketdata.rest_client.stock.intraday.quote(symbol=fubon_sym)
                     
                     c_price = get_val(stock_info, 'closePrice')
                     h_price = get_val(stock_info, 'highPrice')
@@ -193,24 +201,47 @@ def fetch_stock_data(ticker):
         return None, None, "", index_data
 
 # 📱 輸入區塊
-ticker_input = st.text_input("🔍 請輸入台股代號或名稱 (例如: 2330, 台積電, 2408)", "2330").strip()
+ticker_input = st.text_input("🔍 請輸入代號或名稱 (例如: 2330, TSE, 大盤, OTC)", "2330").strip()
 submit_btn = st.button("產生圖卡 🚀", use_container_width=True, type="primary")
 
 st.write("") 
 
 if submit_btn or ticker_input:
     name_to_code, code_to_name = get_stock_dict()
-    target_code = ticker_input if re.match(r'^\d{4,5}$', ticker_input) else name_to_code.get(ticker_input)
+    
+    # --- 💡 新增：大盤指數快捷通道 ---
+    index_map = {
+        "大盤": "^TWII", "加權": "^TWII", "加權指數": "^TWII", "TSE": "^TWII", "TWII": "^TWII",
+        "櫃買": "^TWOII", "櫃買指數": "^TWOII", "OTC": "^TWOII", "TWO": "^TWOII"
+    }
+    
+    user_input_upper = ticker_input.upper()
+    if user_input_upper in index_map:
+        target_code = index_map[user_input_upper]
+    elif re.match(r'^\d{4,5}$', ticker_input):
+        target_code = ticker_input
+    else:
+        target_code = name_to_code.get(ticker_input)
 
     if not target_code:
         st.error(f"❌ 找不到「{ticker_input}」的代號，請確認名稱是否正確。")
     else:
         t = target_code
-        with st.spinner(f"正在擷取 {t} 戰略數據..."):
+        with st.spinner(f"正在擷取戰略數據..."):
             
             df, data_source, stock_name, index_data = fetch_stock_data(t)
-            if not stock_name:
-                stock_name = code_to_name.get(t, "")
+            
+            # 設定顯示名稱與代號
+            if t == "^TWII":
+                stock_name = "加權指數"
+                t_display = "TSE"
+            elif t == "^TWOII":
+                stock_name = "櫃買指數"
+                t_display = "OTC"
+            else:
+                t_display = t
+                if not stock_name:
+                    stock_name = code_to_name.get(t, "")
             
             if df is None:
                 st.error("⚠️ 資料庫目前過於繁忙或限制了連線。請稍等後再試！")
@@ -265,7 +296,7 @@ if submit_btn or ticker_input:
                     st.warning("⚠️ **目前顯示為 Yahoo 基礎報價**：非即時連線，可能有時間落差。")
                 
                 # --- 圖卡視覺化呈現 ---
-                display_title = f"【代號：{t} {stock_name}】" if stock_name else f"【代號：{t}】"
+                display_title = f"【代號：{t_display} {stock_name}】" if stock_name else f"【代號：{t_display}】"
                 st.markdown(f"""
                 <div style="background-color: #d1e7dd; border: 1px solid #badbcc; border-radius: 8px; padding: 12px; text-align: center; margin-bottom: 16px;">
                     <div style="color: #0f5132; font-size: 18px; font-weight: bold;">{display_title}</div>
@@ -294,7 +325,6 @@ if submit_btn or ticker_input:
                     icon = "↑" if p['change'] >= 0 else "↓"
                     idx_html += f"<span style='margin-left: 8px; white-space: nowrap;'>櫃買 <span style='color:{color}; font-weight:bold;'>{p['price']:,.2f} ({icon}{abs(p['change']):.2f} / {p['pct']:+.2f}%)</span></span>"
 
-                # 💡 CSS 響應式排版修正：手機版自動折疊排列
                 st.markdown(f"""
                 <style>
                 .market-header-container {{
@@ -359,7 +389,7 @@ if submit_btn or ticker_input:
                 with c2:
                     c2_html = f"""
                     <div style="padding-top: 0.2rem; padding-bottom: 0.5rem;">
-                        <div style="font-size: 13px; color: var(--text-color); opacity: 0.7; margin-bottom: 4px;">5日均量 (張)</div>
+                        <div style="font-size: 13px; color: var(--text-color); opacity: 0.7; margin-bottom: 4px;">5日均量</div>
                         <div style="font-size: 1.8rem; font-weight: 700; color: var(--text-color); margin-bottom: 2px;">
                             {int(v_ma5):,}
                         </div>
@@ -371,13 +401,13 @@ if submit_btn or ticker_input:
                 with c3:
                     if ma5 > ma5_prev:
                         turn_status, turn_color, turn_icon = "向上", "#d9534f", "↑"
-                        strategy_text = f"💡 **均線戰略**：5日線目前 **向上**。明天收盤只要站穩 **${turn_price_tomorrow:.2f}**，就能繼續維持強勢。"
+                        strategy_text = f"💡 **均線戰略**：5日線目前 **向上**。明天只要站穩 **${turn_price_tomorrow:.2f}**，就能繼續維持強勢。"
                     elif ma5 < ma5_prev:
                         turn_status, turn_color, turn_icon = "下彎", "#5cb85c", "↓"
-                        strategy_text = f"💡 **均線戰略**：5日線目前 **下彎**。明天收盤必須大於 **${turn_price_tomorrow:.2f}**，才能扭轉向上翻揚。"
+                        strategy_text = f"💡 **均線戰略**：5日線目前 **下彎**。明天必須大於 **${turn_price_tomorrow:.2f}**，才能扭轉向上翻揚。"
                     else:
                         turn_status, turn_color, turn_icon = "持平", "gray", "-"
-                        strategy_text = f"💡 **均線戰略**：5日線目前 **持平**。明天收盤需大於 **${turn_price_tomorrow:.2f}**，才會向上翻揚。"
+                        strategy_text = f"💡 **均線戰略**：5日線目前 **持平**。明天需大於 **${turn_price_tomorrow:.2f}**，才會向上翻揚。"
                     
                     c3_html = f"""
                     <div style="padding-top: 0.2rem; padding-bottom: 0.5rem;">
@@ -494,7 +524,7 @@ if submit_btn or ticker_input:
                 st.markdown(ma_html, unsafe_allow_html=True)
                 
                 st.write("")
-                trend_msg = "目前股價位階： "
+                trend_msg = "目前位階： "
                 if curr_price > ma60 and curr_price > ma20: trend_msg += "🔥 **多頭排列** (站上月線與季線，趨勢偏多)"
                 elif curr_price < ma60 and curr_price < ma20: trend_msg += "❄️ **空方修正** (跌破月線與季線，需等待築底)"
                 else: trend_msg += "🌊 **震盪整理** (夾在月線與季線之間，方向待確認)"
