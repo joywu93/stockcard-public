@@ -209,7 +209,6 @@ st.write("")
 if submit_btn or ticker_input:
     name_to_code, code_to_name = get_stock_dict()
     
-    # --- 💡 新增：大盤指數快捷通道 ---
     index_map = {
         "大盤": "^TWII", "加權": "^TWII", "加權指數": "^TWII", "TSE": "^TWII", "TWII": "^TWII",
         "櫃買": "^TWOII", "櫃買指數": "^TWOII", "OTC": "^TWOII", "TWO": "^TWOII"
@@ -409,6 +408,7 @@ if submit_btn or ticker_input:
                         turn_status, turn_color, turn_icon = "持平", "gray", "-"
                         strategy_text = f"💡 **均線戰略**：5日線目前 **持平**。明天需大於 **${turn_price_tomorrow:.2f}**，才會向上翻揚。"
                     
+                    # 💡 修正 1：在方向後面加上 5日與10日均價
                     c3_html = f"""
                     <div style="padding-top: 0.2rem; padding-bottom: 0.5rem;">
                         <div style="font-size: 13px; color: var(--text-color); opacity: 0.7; margin-bottom: 4px;">明日5日扣抵</div>
@@ -416,7 +416,7 @@ if submit_btn or ticker_input:
                             ${turn_price_tomorrow:.2f}
                         </div>
                         <div style="font-size: 14px; color: {turn_color};">
-                            {turn_icon} 5均線 {turn_status}
+                            {turn_icon} 5均線 {turn_status} <span style="font-size: 12px; color: #6c757d;">({ma5:.2f} / {ma10:.2f})</span>
                         </div>
                     </div>
                     """
@@ -454,6 +454,10 @@ if submit_btn or ticker_input:
 
                 st.info(strategy_text)
                 st.info(f"💡 **KD 戰略**：{kd_status}。{kd_desc}")
+                
+                # 💡 修正 2：若是看大盤與櫃買，自動在下方補充說明單位
+                if t in ["^TWII", "^TWOII"]:
+                    st.info("💡 **量能說明**：上方顯示之數據為「一般股票」之成交數量（單位：千張）。")
                 
                 st.write("---")
                 st.markdown("##### 📈 近三個月均線糾結與走勢")
