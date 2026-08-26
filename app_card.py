@@ -271,7 +271,11 @@ if submit_btn or ticker_input:
                 ma3_prev, ma5_prev, ma10_prev, ma20_prev, ma60_prev = [float(s.iloc[-2]) for s in (sma3_series, sma5_series, sma10_series, sma20_series, sma60_series)]
 
                 v_ma5 = float(volume.rolling(5).mean().iloc[-1]) / 1000
+                
+                # --- 💡 新增：未來三日扣抵價 ---
                 turn_price_tomorrow = float(close.iloc[-5])
+                turn_price_after_1 = float(close.iloc[-4]) # 後日
+                turn_price_after_2 = float(close.iloc[-3]) # 大後日
                 
                 b3, b5, b10, b20, b60 = [((curr_price - m) / m) * 100 for m in (ma3, ma5, ma10, ma20, ma60)]
                 
@@ -304,7 +308,7 @@ if submit_btn or ticker_input:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # --- 📈 大盤與台積電即時指數動態呈現 (加入 RWD 響應式設計) ---
+                # --- 📈 大盤與台積電即時指數動態呈現 ---
                 idx_html = ""
                 if index_data['TWSE']:
                     p = index_data['TWSE']
@@ -408,7 +412,7 @@ if submit_btn or ticker_input:
                         turn_status, turn_color, turn_icon = "持平", "gray", "-"
                         strategy_text = f"💡 **均線戰略**：5日線目前 **持平**。明天需大於 **${turn_price_tomorrow:.2f}**，才會向上翻揚。"
                     
-                    # 💡 修正：加上明確的 5SMA 與 10SMA 標籤
+                    # 💡 修正：加入未來兩天扣抵，保持精緻排版
                     c3_html = f"""
                     <div style="padding-top: 0.2rem; padding-bottom: 0.5rem;">
                         <div style="font-size: 13px; color: var(--text-color); opacity: 0.7; margin-bottom: 4px;">明日5日扣抵</div>
@@ -418,6 +422,9 @@ if submit_btn or ticker_input:
                         <div style="font-size: 14px; color: {turn_color};">
                             {turn_icon} 5均線 {turn_status}
                             <div style="font-size: 12px; color: #6c757d; margin-top: 3px;">(5SMA {ma5:.2f} / 10SMA {ma10:.2f})</div>
+                            <div style="font-size: 12px; color: #0288d1; margin-top: 3px; font-weight: bold;">
+                                ⏭️ 後日 {turn_price_after_1:.2f} / 大後 {turn_price_after_2:.2f}
+                            </div>
                         </div>
                     </div>
                     """
