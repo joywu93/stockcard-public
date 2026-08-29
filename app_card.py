@@ -558,7 +558,8 @@ if submit_btn or ticker_input:
                 st.markdown("### 📡 戰情雷達：盤後主力動能名單")
                 
                 # 請將下方的網址替換成您 Google Sheet 發佈為 CSV 的連結
-                GOOGLE_SHEET_CSV_URL = "請填入您的_Google_Sheet_CSV_連結"
+                GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1RnuOM8bZwssG116-p140o9hr-xqZ4qMuTyvGpUHXLfQ/edit?usp=sharing
+"
                 
                 if st.button("🚀 呼叫前日轉折名單", use_container_width=True):
                     with st.spinner("正在讀取雲端名單..."):
