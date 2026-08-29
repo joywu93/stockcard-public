@@ -551,7 +551,7 @@ if submit_btn or ticker_input:
                 # 🚀 新增：呼叫前日轉折名單區塊 (加入狀態記憶功能)
                 # ==========================================
                 st.write("---")
-                st.markdown("### 📡 戰情雷達：盤後均線轉折↑名單")
+                st.markdown("### 📡 戰情雷達：盤整轉折↑")
                 
                 # 使用改裝過的 CSV 直連網址
                 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1RnuOM8bZwssG116-p140o9hr-xqZ4qMuTyvGpUHXLfQ/export?format=csv"
