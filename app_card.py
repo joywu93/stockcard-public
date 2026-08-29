@@ -554,32 +554,21 @@ if submit_btn or ticker_input:
                 # ==========================================
                 st.markdown("### 📡 戰情雷達：盤後主力動能名單")
                 
-                # 請將下方的網址替換成您 Google Sheet 發佈為 CSV 的連結
-                GOOGLE_SHEET_CSV_URL = "請填入您的_Google_Sheet_CSV_連結"
+                # 這裡直接設定為您的真實網址
+                GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSTXdSL-eVcq_5pEO9g8s9Hc4D1BKKOq6hBaxNRmI-plLnQKABej25p-VjFfvCrNyVlOX7MtMlyb1nZ/pub?output=csv"
                 
                 if st.button("🚀 呼叫前日轉折名單", use_container_width=True):
                     with st.spinner("正在讀取雲端名單..."):
                         try:
-                            if GOOGLE_SHEET_CSV_URL == "https://docs.google.com/spreadsheets/d/e/2PACX-1vSTXdSL-eVcq_5pEO9g8s9Hc4D1BKKOq6hBaxNRmI-plLnQKABej25p-VjFfvCrNyVlOX7MtMlyb1nZ/pub?output=csv":
-                                st.warning("⚠️ 請先在程式碼中填入您的 Google Sheet CSV 連結喔！")
-                                mock_data = pd.DataFrame({
-                                    "代號": ["3526", "3147"],
-                                    "名稱": ["凡甲", "大綜"],
-                                    "收盤價": [286.0, 220.0],
-                                    "5SMA乖離率": ["1.2%", "0.8%"],
-                                    "量能放大倍數": ["1.5倍", "1.4倍"]
-                                })
-                                st.dataframe(mock_data, use_container_width=True, hide_index=True)
-                            else:
-                                # 瞬間讀取 Google Sheet CSV，跳過錯誤行數
-                                sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip')
-                                
-                                # 強制只讀取前 5 個有效欄位，切斷所有殘留資料
-                                sheet_df = sheet_df.iloc[:, :5]
-                                
-                                # 顯示資料表
-                                st.success("✅ 讀取成功！以下為符合【均線糾結 < 4%】且【量大於 5日均量 1.3 倍】之標的：")
-                                st.dataframe(sheet_df, use_container_width=True, hide_index=True)
-                                
+                            # 瞬間讀取 Google Sheet CSV，跳過錯誤行數
+                            sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip')
+                            
+                            # 強制只讀取前 5 個有效欄位，切斷所有殘留資料
+                            sheet_df = sheet_df.iloc[:, :5]
+                            
+                            # 顯示資料表
+                            st.success("✅ 讀取成功！以下為符合【均線乖離 < 4%】且【量大於 5日均量 1.3 倍】之標的：")
+                            st.dataframe(sheet_df, use_container_width=True, hide_index=True)
+                            
                         except Exception as e:
                             st.error(f"❌ 讀取失敗，請確認 Google Sheet 連結是否正確或已公開發佈。錯誤訊息：{e}")
