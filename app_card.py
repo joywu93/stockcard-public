@@ -555,7 +555,7 @@ if submit_btn or ticker_input:
                 st.markdown("### 📡 戰情雷達：盤後主力動能名單")
                 
                 # 這裡直接設定為您的真實網址
-                GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSTXdSL-eVcq_5pEO9g8s9Hc4D1BKKOq6hBaxNRmI-plLnQKABej25p-VjFfvCrNyVlOX7MtMlyb1nZ/pub?output=csv"
+                GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1RnuOM8bZwssG116-p140o9hr-xqZ4qMuTyvGpUHXLfQ/edit?usp=sharing"
                 
                 if st.button("🚀 呼叫前日轉折名單", use_container_width=True):
                     with st.spinner("正在讀取雲端名單..."):
