@@ -549,26 +549,30 @@ if submit_btn or ticker_input:
                 
                 st.write("---")
                 
-                # ==========================================
+               # ==========================================
                 # 🚀 新增：呼叫前日轉折名單區塊
                 # ==========================================
                 st.markdown("### 📡 戰情雷達：盤後主力動能名單")
                 
-                # 這裡直接設定為您的真實網址
-                GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1RnuOM8bZwssG116-p140o9hr-xqZ4qMuTyvGpUHXLfQ/edit?usp=sharing"
+                # 使用改裝過的 CSV 直連網址
+                GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1RnuOM8bZwssG116-p140o9hr-xqZ4qMuTyvGpUHXLfQ/export?format=csv"
                 
                 if st.button("🚀 呼叫前日轉折名單", use_container_width=True):
                     with st.spinner("正在讀取雲端名單..."):
                         try:
-                            # 瞬間讀取 Google Sheet CSV，跳過錯誤行數
+                            # 瞬間讀取 Google Sheet CSV
                             sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip')
                             
-                            # 強制只讀取前 5 個有效欄位，切斷所有殘留資料
+                            # 強制只讀取前 5 個有效欄位
                             sheet_df = sheet_df.iloc[:, :5]
+                            
+                            # 確保代號欄位顯示為字串，避免像 0050 變成 50
+                            if '代號' in sheet_df.columns:
+                                sheet_df['代號'] = sheet_df['代號'].astype(str)
                             
                             # 顯示資料表
                             st.success("✅ 讀取成功！以下為符合【均線乖離 < 4%】且【量大於 5日均量 1.3 倍】之標的：")
                             st.dataframe(sheet_df, use_container_width=True, hide_index=True)
                             
                         except Exception as e:
-                            st.error(f"❌ 讀取失敗，請確認 Google Sheet 連結是否正確或已公開發佈。錯誤訊息：{e}")
+                            st.error(f"❌ 讀取失敗，請確認該 Google Sheet 的共用設定是否已開啟為「知道連結的使用者皆可檢視」。錯誤訊息：{e}")
