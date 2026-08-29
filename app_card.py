@@ -576,3 +576,40 @@ if submit_btn or ticker_input:
                             
                         except Exception as e:
                             st.error(f"❌ 讀取失敗，請確認該 Google Sheet 的共用設定是否已開啟為「知道連結的使用者皆可檢視」。錯誤訊息：{e}")
+# ==========================================
+                # 🚀 新增：呼叫前日轉折名單區塊 (加入狀態記憶功能)
+                # ==========================================
+                st.write("---")
+                st.markdown("### 📡 戰情雷達：盤後主力動能名單")
+                
+                # 使用改裝過的 CSV 直連網址
+                GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1RnuOM8bZwssG116-p140o9hr-xqZ4qMuTyvGpUHXLfQ/export?format=csv"
+                
+                # 建立 Session State 記憶體，記住表格是否要顯示
+                if "show_radar" not in st.session_state:
+                    st.session_state.show_radar = False
+                
+                # 按下按鈕時，切換記憶狀態 (打開變關閉，關閉變打開)
+                if st.button("🚀 呼叫/隱藏 前日轉折名單", use_container_width=True):
+                    st.session_state.show_radar = not st.session_state.show_radar
+                
+                # 根據記憶體的狀態，決定是否顯示表格
+                if st.session_state.show_radar:
+                    with st.spinner("正在讀取雲端名單..."):
+                        try:
+                            # 瞬間讀取 Google Sheet CSV
+                            sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip')
+                            
+                            # 強制只讀取前 5 個有效欄位
+                            sheet_df = sheet_df.iloc[:, :5]
+                            
+                            # 確保代號欄位顯示為字串
+                            if '代號' in sheet_df.columns:
+                                sheet_df['代號'] = sheet_df['代號'].astype(str)
+                            
+                            # 顯示資料表 (更新為最新嚴格條件提示詞)
+                            st.success("✅ 讀取成功！以下為符合【當日價>10sma 10%以內 & 5/10均線乖離 < 4%】且【量大於 5日均量 1.3 倍】之標的：")
+                            st.dataframe(sheet_df, use_container_width=True, hide_index=True)
+                            
+                        except Exception as e:
+                            st.error(f"❌ 讀取失敗，請確認該 Google Sheet 的共用設定是否已開啟為「知道連結的使用者皆可檢視」。錯誤訊息：{e}")
