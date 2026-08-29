@@ -547,3 +547,41 @@ if submit_btn or ticker_input:
                     else: trend_msg += f"<br>⚠️ **長線空方基準**：目前低於 240SMA(年線 {ma240:.2f})，上方有長線蓋頭反壓。"
                 
                 st.markdown(trend_msg, unsafe_allow_html=True)
+
+# --- 以上為原有的圖卡程式碼 ---
+                
+                st.write("---")
+                
+                # ==========================================
+                # 🚀 新增：呼叫前日轉折名單區塊
+                # ==========================================
+                st.markdown("### 📡 戰情雷達：盤後主力動能名單")
+                
+                # 請將下方的網址替換成您 Google Sheet 發佈為 CSV 的連結
+                GOOGLE_SHEET_CSV_URL = "請填入您的_Google_Sheet_CSV_連結"
+                
+                if st.button("🚀 呼叫前日轉折名單", use_container_width=True):
+                    with st.spinner("正在讀取雲端名單..."):
+                        try:
+                            # 如果您還沒填入真實網址，這裡先做個防呆提示
+                            if GOOGLE_SHEET_CSV_URL == "請填入您的_Google_Sheet_CSV_連結":
+                                st.warning("⚠️ 請先在程式碼中填入您的 Google Sheet CSV 連結喔！")
+                                # 以下為預覽用的假資料，等您填入真實網址後可刪除這段假資料
+                                mock_data = pd.DataFrame({
+                                    "代號": ["3526", "3147"],
+                                    "名稱": ["凡甲", "大綜"],
+                                    "收盤價": [286.0, 220.0],
+                                    "5SMA乖離率": ["1.2%", "0.8%"],
+                                    "量能放大倍數": ["1.5倍", "1.4倍"]
+                                })
+                                st.dataframe(mock_data, use_container_width=True, hide_index=True)
+                            else:
+                                # 瞬間讀取 Google Sheet CSV 
+                                sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
+                                
+                                # 顯示資料表
+                                st.success("✅ 讀取成功！以下為符合【均線糾結 < 4%】且【量大於 5日均量 1.3 倍】之標的：")
+                                st.dataframe(sheet_df, use_container_width=True, hide_index=True)
+                                
+                        except Exception as e:
+                            st.error(f"❌ 讀取失敗，請確認 Google Sheet 連結是否正確或已公開發佈。錯誤訊息：{e}")
