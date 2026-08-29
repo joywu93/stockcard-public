@@ -433,7 +433,7 @@ if submit_btn or ticker_input:
                     if k_val >= 80:
                         kd_status, kd_desc = "🔥 高檔超買", f"K值來到 {k_val:.1f}，短線有過熱跡象，需留意獲利了結賣壓。"
                     elif k_val <= 20:
-                        kd_status, kd_desc = "❄️ 低檔超賣", f"K值來到 {k_val:.1f}，短線跌幅已深，隨時可能醞釀技術性反彈。"
+                        kd_status, kd_desc = "❄️ 低檔超賣", f"K值來到 {k_val:.1f}，短線跌幅已深，隨隨時可能醞釀技術性反彈。"
                     elif k_val > d_val:
                         kd_status, kd_desc = "📈 短線偏多", "K值大於D值 (黃金交叉)，動能偏向多方，適合順勢操作。"
                     else:
@@ -546,37 +546,8 @@ if submit_btn or ticker_input:
                     else: trend_msg += f"<br>⚠️ **長線空方基準**：目前低於 240SMA(年線 {ma240:.2f})，上方有長線蓋頭反壓。"
                 
                 st.markdown(trend_msg, unsafe_allow_html=True)
-                
-                st.write("---")
-                
-               # ==========================================
-                # 🚀 新增：呼叫前日轉折名單區塊
+
                 # ==========================================
-                st.markdown("### 📡 戰情雷達：盤後主力動能名單")
-                
-                # 使用改裝過的 CSV 直連網址
-                GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1RnuOM8bZwssG116-p140o9hr-xqZ4qMuTyvGpUHXLfQ/export?format=csv"
-                
-                if st.button("🚀 呼叫前日轉折名單", use_container_width=True):
-                    with st.spinner("正在讀取雲端名單..."):
-                        try:
-                            # 瞬間讀取 Google Sheet CSV
-                            sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip')
-                            
-                            # 強制只讀取前 5 個有效欄位
-                            sheet_df = sheet_df.iloc[:, :5]
-                            
-                            # 確保代號欄位顯示為字串，避免像 0050 變成 50
-                            if '代號' in sheet_df.columns:
-                                sheet_df['代號'] = sheet_df['代號'].astype(str)
-                            
-                            # 顯示資料表
-                            st.success("✅ 讀取成功！以下為符合【均線乖離 < 4%】且【量大於 5日均量 1.3 倍】之標的：")
-                            st.dataframe(sheet_df, use_container_width=True, hide_index=True)
-                            
-                        except Exception as e:
-                            st.error(f"❌ 讀取失敗，請確認該 Google Sheet 的共用設定是否已開啟為「知道連結的使用者皆可檢視」。錯誤訊息：{e}")
-# ==========================================
                 # 🚀 新增：呼叫前日轉折名單區塊 (加入狀態記憶功能)
                 # ==========================================
                 st.write("---")
