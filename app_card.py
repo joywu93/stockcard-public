@@ -272,7 +272,7 @@ if submit_btn or ticker_input:
 
                 v_ma5 = float(volume.rolling(5).mean().iloc[-1]) / 1000
                 
-                # --- 💡 新增：未來三日扣抵價 ---
+                # --- 💡 未來三日扣抵價 ---
                 turn_price_tomorrow = float(close.iloc[-5])
                 turn_price_after_1 = float(close.iloc[-4]) # 後日
                 turn_price_after_2 = float(close.iloc[-3]) # 大後日
@@ -412,7 +412,6 @@ if submit_btn or ticker_input:
                         turn_status, turn_color, turn_icon = "持平", "gray", "-"
                         strategy_text = f"💡 **均線戰略**：5日線目前 **持平**。明天需大於 **${turn_price_tomorrow:.2f}**，才會向上翻揚。"
                     
-                    # 💡 修正：加入未來兩天扣抵，保持精緻排版
                     c3_html = f"""
                     <div style="padding-top: 0.2rem; padding-bottom: 0.5rem;">
                         <div style="font-size: 13px; color: var(--text-color); opacity: 0.7; margin-bottom: 4px;">明日5日扣抵</div>
@@ -547,8 +546,6 @@ if submit_btn or ticker_input:
                     else: trend_msg += f"<br>⚠️ **長線空方基準**：目前低於 240SMA(年線 {ma240:.2f})，上方有長線蓋頭反壓。"
                 
                 st.markdown(trend_msg, unsafe_allow_html=True)
-
-# --- 以上為原有的圖卡程式碼 ---
                 
                 st.write("---")
                 
@@ -558,14 +555,13 @@ if submit_btn or ticker_input:
                 st.markdown("### 📡 戰情雷達：盤後主力動能名單")
                 
                 # 請將下方的網址替換成您 Google Sheet 發佈為 CSV 的連結
-                GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1RnuOM8bZwssG116-p140o9hr-xqZ4qMuTyvGpUHXLfQ/edit?usp=sharing"                
+                GOOGLE_SHEET_CSV_URL = "請填入您的_Google_Sheet_CSV_連結"
+                
                 if st.button("🚀 呼叫前日轉折名單", use_container_width=True):
                     with st.spinner("正在讀取雲端名單..."):
                         try:
-                            # 如果您還沒填入真實網址，這裡先做個防呆提示
-                            if GOOGLE_SHEET_CSV_URL == "請填入您的_Google_Sheet_CSV_連結":
+                            if GOOGLE_SHEET_CSV_URL == "https://docs.google.com/spreadsheets/d/1RnuOM8bZwssG116-p140o9hr-xqZ4qMuTyvGpUHXLfQ/edit?usp=sharing":
                                 st.warning("⚠️ 請先在程式碼中填入您的 Google Sheet CSV 連結喔！")
-                                # 以下為預覽用的假資料，等您填入真實網址後可刪除這段假資料
                                 mock_data = pd.DataFrame({
                                     "代號": ["3526", "3147"],
                                     "名稱": ["凡甲", "大綜"],
@@ -575,8 +571,11 @@ if submit_btn or ticker_input:
                                 })
                                 st.dataframe(mock_data, use_container_width=True, hide_index=True)
                             else:
-                                # 瞬間讀取 Google Sheet CSV 
-                                sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
+                                # 瞬間讀取 Google Sheet CSV，跳過錯誤行數
+                                sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip')
+                                
+                                # 強制只讀取前 5 個有效欄位，切斷所有殘留資料
+                                sheet_df = sheet_df.iloc[:, :5]
                                 
                                 # 顯示資料表
                                 st.success("✅ 讀取成功！以下為符合【均線糾結 < 4%】且【量大於 5日均量 1.3 倍】之標的：")
