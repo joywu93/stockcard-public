@@ -560,7 +560,7 @@ if submit_btn or ticker_input:
                 if st.button("🚀 呼叫前日轉折名單", use_container_width=True):
                     with st.spinner("正在讀取雲端名單..."):
                         try:
-                            if GOOGLE_SHEET_CSV_URL == "https://docs.google.com/spreadsheets/d/1RnuOM8bZwssG116-p140o9hr-xqZ4qMuTyvGpUHXLfQ/edit?usp=sharing":
+                            if GOOGLE_SHEET_CSV_URL == "https://docs.google.com/spreadsheets/d/e/2PACX-1vSTXdSL-eVcq_5pEO9g8s9Hc4D1BKKOq6hBaxNRmI-pILnQKAbej25p-VjFfvCrNyVlOX7MtMlyb1nZ/pub?output=csv":
                                 st.warning("⚠️ 請先在程式碼中填入您的 Google Sheet CSV 連結喔！")
                                 mock_data = pd.DataFrame({
                                     "代號": ["3526", "3147"],
