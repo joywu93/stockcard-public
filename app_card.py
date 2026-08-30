@@ -551,6 +551,7 @@ if submit_btn or ticker_input:
                 # 🚀 新增：呼叫前日轉折名單區塊 (加入狀態記憶功能)
                 # ==========================================
                 st.write("---")
+                # 標題已為您更新為「盤整轉折↑」
                 st.markdown("### 📡 戰情雷達：盤整轉折↑")
                 
                 # 使用改裝過的 CSV 直連網址
@@ -568,18 +569,24 @@ if submit_btn or ticker_input:
                 if st.session_state.show_radar:
                     with st.spinner("正在讀取雲端名單..."):
                         try:
-                            # 瞬間讀取 Google Sheet CSV
-                            sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip')
+                            # 瞬間讀取 Google Sheet CSV，強制將代號讀為字串避免去零
+                            sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip', dtype={'代號': str})
                             
                             # 強制只讀取前 5 個有效欄位
                             sheet_df = sheet_df.iloc[:, :5]
                             
-                            # 確保代號欄位顯示為字串
+                            # 在前端也做一次排序確保萬無一失
                             if '代號' in sheet_df.columns:
-                                sheet_df['代號'] = sheet_df['代號'].astype(str)
+                                sheet_df = sheet_df.sort_values('代號').reset_index(drop=True)
                             
-                            # 顯示資料表 (更新為最新嚴格條件提示詞)
-                            st.success("✅ 讀取成功！以下為符合【當日價>10sma 10%以內 & 5/10均線乖離 < 4%】且【量大於 5日均量 1.3 倍】之標的：")
+                            # 🌟 計算總檔數
+                            total_count = len(sheet_df)
+                            # 如果遇到大盤無符合個股時的防呆處理
+                            if total_count == 1 and sheet_df['代號'].iloc[0] == "-":
+                                total_count = 0
+                            
+                            # 顯示資料表 (結尾加入總檔數統計)
+                            st.success(f"✅ 讀取成功！以下為符合【當日價>10sma 10%以內 & 5/10均線乖離 < 4%】且【量大於 5日均量 1.3 倍】之標的： 共 **{total_count}** 檔")
                             st.dataframe(sheet_df, use_container_width=True, hide_index=True)
                             
                         except Exception as e:
