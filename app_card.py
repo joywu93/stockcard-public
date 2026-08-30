@@ -547,11 +547,10 @@ if submit_btn or ticker_input:
                 
                 st.markdown(trend_msg, unsafe_allow_html=True)
 
-                # ==========================================
+               # ==========================================
                 # 🚀 新增：呼叫前日轉折名單區塊 (加入狀態記憶功能)
                 # ==========================================
                 st.write("---")
-                # 標題已為您更新為「盤整轉折↑」
                 st.markdown("### 📡 戰情雷達：盤整轉折↑")
                 
                 # 使用改裝過的 CSV 直連網址
@@ -561,33 +560,52 @@ if submit_btn or ticker_input:
                 if "show_radar" not in st.session_state:
                     st.session_state.show_radar = False
                 
-                # 按下按鈕時，切換記憶狀態 (打開變關閉，關閉變打開)
+                # 按下按鈕時，切換記憶狀態
                 if st.button("🚀 呼叫/隱藏 前日轉折名單", use_container_width=True):
                     st.session_state.show_radar = not st.session_state.show_radar
                 
                 # 根據記憶體的狀態，決定是否顯示表格
                 if st.session_state.show_radar:
+                    
+                    # 🌟 新增：成交量過濾條件選擇器
+                    vol_option = st.radio(
+                        "🔍 選擇流動性過濾條件：",
+                        options=["> 500張", "> 1000張"],
+                        horizontal=True
+                    )
+                    vol_threshold = 500 if vol_option == "> 500張" else 1000
+                    
                     with st.spinner("正在讀取雲端名單..."):
                         try:
-                            # 瞬間讀取 Google Sheet CSV，強制將代號讀為字串避免去零
+                            # 讀取 CSV
                             sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip', dtype={'代號': str})
                             
-                            # 強制只讀取前 5 個有效欄位
-                            sheet_df = sheet_df.iloc[:, :5]
+                            # 🌟 讀取前 6 個有效欄位 (包含新加入的成交量)
+                            if len(sheet_df.columns) >= 6:
+                                sheet_df = sheet_df.iloc[:, :6]
                             
-                            # 在前端也做一次排序確保萬無一失
+                            # 在前端做一次排序
                             if '代號' in sheet_df.columns:
                                 sheet_df = sheet_df.sort_values('代號').reset_index(drop=True)
                             
-                            # 🌟 計算總檔數
+                            # 🌟 執行前端動態成交量過濾
+                            if '當日量(張)' in sheet_df.columns and sheet_df['代號'].iloc[0] != "-":
+                                sheet_df['當日量(張)'] = pd.to_numeric(sheet_df['當日量(張)'], errors='coerce').fillna(0)
+                                sheet_df = sheet_df[sheet_df['當日量(張)'] >= vol_threshold]
+                            
+                            # 計算總檔數
                             total_count = len(sheet_df)
-                            # 如果遇到大盤無符合個股時的防呆處理
                             if total_count == 1 and sheet_df['代號'].iloc[0] == "-":
                                 total_count = 0
                             
-                            # 顯示資料表 (結尾加入總檔數統計)
-                            st.success(f"✅ 讀取成功！以下為符合【當日價>10sma 10%以內 & 5/10均線乖離 < 4%】且【量大於 5日均量 1.3 倍】之標的： 共 **{total_count}** 檔")
-                            st.dataframe(sheet_df, use_container_width=True, hide_index=True)
+                            # 顯示資料表 (更新為包含成交量條件的提示詞)
+                            st.success(f"✅ 讀取成功！符合【當日價>10sma 10%以內 & 5/10均線乖離 < 4%】且【量大於 5日均量 1.3 倍 & 當日量 {vol_option}】之標的： 共 **{total_count}** 檔")
+                            
+                            # 將數字格式化，避免顯示小數點
+                            if '當日量(張)' in sheet_df.columns:
+                                st.dataframe(sheet_df.style.format({'當日量(張)': "{:,.0f}"}), use_container_width=True, hide_index=True)
+                            else:
+                                st.dataframe(sheet_df, use_container_width=True, hide_index=True)
                             
                         except Exception as e:
-                            st.error(f"❌ 讀取失敗，請確認該 Google Sheet 的共用設定是否已開啟為「知道連結的使用者皆可檢視」。錯誤訊息：{e}")
+                            st.error(f"❌ 讀取失敗，請確認該 Google Sheet 的共用設定是否正確。錯誤訊息：{e}")
