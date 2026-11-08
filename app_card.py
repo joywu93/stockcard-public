@@ -616,9 +616,15 @@ if submit_btn or ticker_input:
 
                     # 診斷二：台積電天花板檢驗
                     if target_price > ceiling_price:
-                        st.error(f"🔴 **泡沫警示**：目標價 ({target_price}元) 已突破設定的 {premium_ratio} 倍溢價天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)**！")
+                        # 依據天花板 PE 的絕對值，給予不同程度的警示詞
+                        if ceiling_pe >= 30:
+                            st.error(f"🔴 **泡沫警示**：目標價 ({target_price}元) 已嚴重突破 {premium_ratio} 倍溢價天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)**，追高風險巨大！")
+                        elif ceiling_pe >= 20:
+                            st.warning(f"🟠 **估值過熱**：目標價 ({target_price}元) 已突破台積電基準天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)**，評價偏高。")
+                        else:
+                            st.error(f"🔴 **突破設定區間**：目標價 ({target_price}元) 已超越您設定的保守天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)**。")
                     else:
-                        st.success(f"🟢 **估值安全**：目標價落在天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)** 之下，未達估值極限。")
+                        st.success(f"🟢 **估值安全**：目標價落在設定天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)** 之下，未達估值極限。")
 
                     # 診斷三：前瞻殖利率檢驗
                     if forward_yield >= 4.0:
