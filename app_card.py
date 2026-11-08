@@ -130,6 +130,7 @@ def fetch_stock_data(ticker):
                         
                     sdk.login(st.secrets["fubon"]["id"], st.secrets["fubon"]["password"], cert_path, st.secrets["fubon"]["cert_password"])
                     
+                    # 🌟 保持啟動即時串流，讓交易日盤中能極速獲取即時報價
                     sdk.init_realtime()  
                     
                     # 抓取上方小字的大盤與台積電即時報價
@@ -590,6 +591,9 @@ if submit_btn or ticker_input:
                     ceiling_pe = tsmc_pe * premium_ratio
                     ceiling_price = ceiling_pe * est_eps
                     
+                    # 🌟 計算目標價隱含的本益比
+                    target_pe = target_price / est_eps if est_eps > 0 else 0
+                    
                     # 前瞻殖利率計算
                     est_dividend = est_eps * (payout_ratio / 100)
                     forward_yield = (est_dividend / curr_price) * 100 if curr_price > 0 else 0
@@ -597,7 +601,7 @@ if submit_btn or ticker_input:
                     # 📊 產出診斷報告
                     st.markdown("##### 📝 估值診斷報告")
                     
-                    # 🌟 診斷一：年期與成長率檢驗 (加入殖利率防呆判定)
+                    # 診斷一：年期與成長率檢驗 (加入殖利率防呆判定)
                     if target_price <= curr_price:
                         st.info("💡 目標價低於或等於目前股價，無須計算成長年期。")
                     elif est_growth <= 0:
@@ -608,23 +612,21 @@ if submit_btn or ticker_input:
                         elif years_to_target <= 2.5:
                             st.warning(f"🟡 **溫和成長**：以 {est_growth}% 的成長率，需 **{years_to_target:.1f} 年** 才能達標。")
                         else:
-                            # 關鍵修正：如果有高殖利率保護，就不該視為追高風險，而是長期投資優勢！
                             if forward_yield >= 4.0:
                                 st.info(f"⏳ **長線佈局**：以目前成長率需 **{years_to_target:.1f} 年** 達標。但擁有 **{forward_yield:.2f}% 高殖利率防護**，等待期具備領息優勢，適合長期投資。")
                             else:
                                 st.error(f"❌ **極度樂觀 (追高風險)**：需高達 **{years_to_target:.1f} 年** 才能達標，且缺乏高息保護，追高風險極大。")
 
-                    # 診斷二：台積電天花板檢驗
+                    # 🌟 診斷二：台積電天花板檢驗 (加入目標價隱含 PE 的對比)
                     if target_price > ceiling_price:
-                        # 依據天花板 PE 的絕對值，給予不同程度的警示詞
                         if ceiling_pe >= 30:
-                            st.error(f"🔴 **泡沫警示**：目標價 ({target_price}元) 已嚴重突破 {premium_ratio} 倍溢價天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)**，追高風險巨大！")
+                            st.error(f"🔴 **泡沫警示**：目標價 ({target_price}元 / 隱含 PE **{target_pe:.1f} 倍**) 已嚴重突破 {premium_ratio} 倍溢價天花板 **(上限 {ceiling_price:.1f}元 / PE {ceiling_pe:.1f} 倍)**，追高風險巨大！")
                         elif ceiling_pe >= 20:
-                            st.warning(f"🟠 **估值過熱**：目標價 ({target_price}元) 已突破台積電基準天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)**，評價偏高。")
+                            st.warning(f"🟠 **估值過熱**：目標價 ({target_price}元 / 隱含 PE **{target_pe:.1f} 倍**) 已突破台積電基準天花板 **(上限 {ceiling_price:.1f}元 / PE {ceiling_pe:.1f} 倍)**，評價偏高。")
                         else:
-                            st.error(f"🔴 **突破設定區間**：目標價 ({target_price}元) 已超越您設定的保守天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)**。")
+                            st.error(f"🔴 **突破設定區間**：目標價 ({target_price}元 / 隱含 PE **{target_pe:.1f} 倍**) 已超越您設定的保守天花板 **(上限 {ceiling_price:.1f}元 / PE {ceiling_pe:.1f} 倍)**。")
                     else:
-                        st.success(f"🟢 **估值安全**：目標價落在設定天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)** 之下，未達估值極限。")
+                        st.success(f"🟢 **估值安全**：目標價 ({target_price}元 / 隱含 PE **{target_pe:.1f} 倍**) 落在設定天花板 **(上限 {ceiling_price:.1f}元 / PE {ceiling_pe:.1f} 倍)** 之下，未達估值極限。")
 
                     # 診斷三：前瞻殖利率檢驗
                     if forward_yield >= 4.0:
