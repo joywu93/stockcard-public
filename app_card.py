@@ -7,7 +7,7 @@ import time
 import requests
 import os
 import base64
-import math  # 🌟 新增：用於 CAGR 年期反推的對數運算
+import math  # 用於 CAGR 年期反推的對數運算
 
 # 嘗試載入富邦 SDK
 try:
@@ -129,7 +129,9 @@ def fetch_stock_data(ticker):
                         f.write(cert_data)
                         
                     sdk.login(st.secrets["fubon"]["id"], st.secrets["fubon"]["password"], cert_path, st.secrets["fubon"]["cert_password"])
-                    sdk.init_realtime() 
+                    
+                    # 🌟 恢復此行，確保交易日盤中能享有極速即時報價串流
+                    sdk.init_realtime()  
                     
                     # 抓取上方小字的大盤與台積電即時報價
                     try:
@@ -555,61 +557,75 @@ if submit_btn or ticker_input:
                 with st.expander("📊 法人估值與 CAGR 檢驗計算機 (點擊展開)"):
                     st.markdown("<div style='color: #0f5132; font-size: 16px; font-weight: bold; margin-bottom: 10px;'>🛡️ 由上而下 (Top-Down) 估值防護網</div>", unsafe_allow_html=True)
                     
-                    # 第一排：基本面與目標價輸入
+                    # 第一排：個股基本面預估
+                    st.markdown("<div style='font-size: 14px; font-weight: bold; color: #6c757d; margin-bottom: 5px;'>📌 個股基本面預估</div>", unsafe_allow_html=True)
                     col_e1, col_e2, col_e3 = st.columns(3)
                     with col_e1:
                         est_eps = st.number_input("今年預估 EPS (元)", min_value=0.0, value=10.0, step=0.1, help="請參考您的基本面系統數據")
                     with col_e2:
                         est_growth = st.number_input("預估 EPS 成長率 (%)", value=20.0, step=1.0, help="請參考您的基本面系統數據")
                     with col_e3:
-                        target_price = st.number_input("法人/預期目標價 (元)", min_value=0.0, value=float(curr_price*1.2), step=1.0)
+                        payout_ratio = st.number_input("預估配息率 (%)", min_value=0.0, max_value=100.0, value=60.0, step=5.0, help="歷年平均盈餘分配率")
 
-                    # 第二排：台積電天花板設定
-                    st.markdown("<div style='font-size: 14px; font-weight: bold; color: #6c757d; margin-top: 10px;'>📌 估值天花板參數設定</div>", unsafe_allow_html=True)
-                    col_t1, col_t2 = st.columns(2)
+                    # 第二排：估值天花板與目標價設定
+                    st.markdown("<div style='font-size: 14px; font-weight: bold; color: #6c757d; margin-top: 10px; margin-bottom: 5px;'>📌 估值天花板與目標價設定</div>", unsafe_allow_html=True)
+                    col_t1, col_t2, col_t3 = st.columns(3)
                     with col_t1:
-                        tsmc_pe = st.number_input("台積電基準本益比 (PE)", min_value=10.0, value=20.0, step=1.0)
+                        target_price = st.number_input("法人/預期目標價 (元)", min_value=0.0, value=float(curr_price*1.2), step=1.0)
                     with col_t2:
-                        premium_ratio = st.number_input("容許溢價倍數 (倍)", min_value=0.5, value=1.5, step=0.1, help="例如: 1.5 代表最高給予台積電 1.5 倍的本益比")
+                        tsmc_pe = st.number_input("台積電基準本益比 (PE)", min_value=10.0, value=20.0, step=1.0)
+                    with col_t3:
+                        premium_ratio = st.number_input("容許溢價倍數 (倍)", min_value=0.1, value=1.5, step=0.1)
 
                     st.write("---")
                     
                     # 💡 核心邏輯運算
+                    # 1. 隱含要求報酬率 & 達標年期
                     implied_return = ((target_price / curr_price) - 1) * 100 if curr_price > 0 else 0
-                    
                     years_to_target = 0
                     if target_price > curr_price and est_growth > 0:
                         try:
-                            # 複利公式反推
                             years_to_target = math.log(target_price / curr_price) / math.log(1 + (est_growth / 100))
                         except:
                             years_to_target = 99
                             
+                    # 2. 台積電天花板計算
                     ceiling_pe = tsmc_pe * premium_ratio
                     ceiling_price = ceiling_pe * est_eps
+                    
+                    # 3. 前瞻殖利率計算
+                    est_dividend = est_eps * (payout_ratio / 100)
+                    forward_yield = (est_dividend / curr_price) * 100 if curr_price > 0 else 0
                     
                     # 📊 產出診斷報告
                     st.markdown("##### 📝 估值診斷報告")
                     
-                    # 診斷一：年期與成長率檢驗
+                    # 診斷一：年期與成長率檢驗 (攻擊力)
                     if target_price <= curr_price:
                         st.info("💡 目標價低於或等於目前股價，無須計算成長年期。")
                     elif est_growth <= 0:
                         st.warning("⚠️ 預估成長率為 0 或負數，無法純靠基本面成長達到目標價，此目標價隱含純粹的「本益比調升(炒作)」。")
                     else:
                         if years_to_target <= 1.2:
-                            st.success(f"✅ **合理動能**：以每年 {est_growth}% 的成長率，約 **{years_to_target:.1f} 年** 即可達到目標價。")
+                            st.success(f"📈 **合理動能**：以每年 {est_growth}% 的成長率，約 **{years_to_target:.1f} 年** 即可達到目標價。")
                         elif years_to_target <= 2.5:
                             st.warning(f"⚠️ **過度透支**：以 {est_growth}% 的成長率，需 **{years_to_target:.1f} 年** 才能達標。法人可能已將明後年的成長先算進去了。")
                         else:
                             st.error(f"❌ **極度樂觀**：以目前的成長率，需高達 **{years_to_target:.1f} 年** 才能達標！追高風險極大。")
 
-                    # 診斷二：台積電天花板檢驗
+                    # 診斷二：台積電天花板檢驗 (估值極限)
                     if target_price > ceiling_price:
-                        st.error(f"🔴 **泡沫警示**：目標價 ({target_price}元) 已突破台積電 {premium_ratio} 倍溢價天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)**！")
+                        st.error(f"🔴 **泡沫警示**：目標價 ({target_price}元) 已突破設定的 {premium_ratio} 倍溢價天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)**！")
                     else:
                         st.success(f"🟢 **估值安全**：目標價落在天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)** 之下，未達估值極限。")
 
+                    # 診斷三：前瞻殖利率檢驗 (下檔保護)
+                    if forward_yield >= 4.0:
+                        st.success(f"🛡️ **下檔保護**：前瞻殖利率達 **{forward_yield:.2f}%** (預估配息 {est_dividend:.2f} 元)，具備優良的資金避風港防守價值。")
+                    elif forward_yield >= 2.5:
+                        st.warning(f"🟡 **防守一般**：前瞻殖利率為 **{forward_yield:.2f}%** (預估配息 {est_dividend:.2f} 元)，防守力道普通，需更依賴資本利得。")
+                    else:
+                        st.error(f"⚠️ **脆弱防線**：前瞻殖利率僅 **{forward_yield:.2f}%** (預估配息 {est_dividend:.2f} 元)，下檔缺乏高息保護，若遇大盤修正易遭提款。")
 
                 # ==========================================
                 # 🚀 新增：呼叫前日轉折名單區塊 (加入狀態記憶功能)
