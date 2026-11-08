@@ -7,6 +7,7 @@ import time
 import requests
 import os
 import base64
+import math  # 🌟 新增：用於 CAGR 年期反推的對數運算
 
 # 嘗試載入富邦 SDK
 try:
@@ -547,7 +548,70 @@ if submit_btn or ticker_input:
                 
                 st.markdown(trend_msg, unsafe_allow_html=True)
 
-               # ==========================================
+                # ==========================================
+                # 📊 新增：法人目標價估值與 CAGR 計算機 (摺疊面板)
+                # ==========================================
+                st.write("---")
+                with st.expander("📊 法人估值與 CAGR 檢驗計算機 (點擊展開)"):
+                    st.markdown("<div style='color: #0f5132; font-size: 16px; font-weight: bold; margin-bottom: 10px;'>🛡️ 由上而下 (Top-Down) 估值防護網</div>", unsafe_allow_html=True)
+                    
+                    # 第一排：基本面與目標價輸入
+                    col_e1, col_e2, col_e3 = st.columns(3)
+                    with col_e1:
+                        est_eps = st.number_input("今年預估 EPS (元)", min_value=0.0, value=10.0, step=0.1, help="請參考您的基本面系統數據")
+                    with col_e2:
+                        est_growth = st.number_input("預估 EPS 成長率 (%)", value=20.0, step=1.0, help="請參考您的基本面系統數據")
+                    with col_e3:
+                        target_price = st.number_input("法人/預期目標價 (元)", min_value=0.0, value=float(curr_price*1.2), step=1.0)
+
+                    # 第二排：台積電天花板設定
+                    st.markdown("<div style='font-size: 14px; font-weight: bold; color: #6c757d; margin-top: 10px;'>📌 估值天花板參數設定</div>", unsafe_allow_html=True)
+                    col_t1, col_t2 = st.columns(2)
+                    with col_t1:
+                        tsmc_pe = st.number_input("台積電基準本益比 (PE)", min_value=10.0, value=20.0, step=1.0)
+                    with col_t2:
+                        premium_ratio = st.number_input("容許溢價倍數 (倍)", min_value=0.5, value=1.5, step=0.1, help="例如: 1.5 代表最高給予台積電 1.5 倍的本益比")
+
+                    st.write("---")
+                    
+                    # 💡 核心邏輯運算
+                    implied_return = ((target_price / curr_price) - 1) * 100 if curr_price > 0 else 0
+                    
+                    years_to_target = 0
+                    if target_price > curr_price and est_growth > 0:
+                        try:
+                            # 複利公式反推
+                            years_to_target = math.log(target_price / curr_price) / math.log(1 + (est_growth / 100))
+                        except:
+                            years_to_target = 99
+                            
+                    ceiling_pe = tsmc_pe * premium_ratio
+                    ceiling_price = ceiling_pe * est_eps
+                    
+                    # 📊 產出診斷報告
+                    st.markdown("##### 📝 估值診斷報告")
+                    
+                    # 診斷一：年期與成長率檢驗
+                    if target_price <= curr_price:
+                        st.info("💡 目標價低於或等於目前股價，無須計算成長年期。")
+                    elif est_growth <= 0:
+                        st.warning("⚠️ 預估成長率為 0 或負數，無法純靠基本面成長達到目標價，此目標價隱含純粹的「本益比調升(炒作)」。")
+                    else:
+                        if years_to_target <= 1.2:
+                            st.success(f"✅ **合理動能**：以每年 {est_growth}% 的成長率，約 **{years_to_target:.1f} 年** 即可達到目標價。")
+                        elif years_to_target <= 2.5:
+                            st.warning(f"⚠️ **過度透支**：以 {est_growth}% 的成長率，需 **{years_to_target:.1f} 年** 才能達標。法人可能已將明後年的成長先算進去了。")
+                        else:
+                            st.error(f"❌ **極度樂觀**：以目前的成長率，需高達 **{years_to_target:.1f} 年** 才能達標！追高風險極大。")
+
+                    # 診斷二：台積電天花板檢驗
+                    if target_price > ceiling_price:
+                        st.error(f"🔴 **泡沫警示**：目標價 ({target_price}元) 已突破台積電 {premium_ratio} 倍溢價天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)**！")
+                    else:
+                        st.success(f"🟢 **估值安全**：目標價落在天花板 **({ceiling_price:.1f}元 / 換算PE {ceiling_pe:.1f}倍)** 之下，未達估值極限。")
+
+
+                # ==========================================
                 # 🚀 新增：呼叫前日轉折名單區塊 (加入狀態記憶功能)
                 # ==========================================
                 st.write("---")
@@ -580,29 +644,31 @@ if submit_btn or ticker_input:
                             # 讀取 CSV
                             sheet_df = pd.read_csv(GOOGLE_SHEET_CSV_URL, on_bad_lines='skip', dtype={'代號': str})
                             
-                            # 🌟 讀取前 6 個有效欄位 (包含新加入的成交量)
-                            if len(sheet_df.columns) >= 6:
-                                sheet_df = sheet_df.iloc[:, :6]
-                            
-                            # 在前端做一次排序
-                            if '代號' in sheet_df.columns:
-                                sheet_df = sheet_df.sort_values('代號').reset_index(drop=True)
-                            
-                            # 🌟 執行前端動態成交量過濾
-                            if '當日量(張)' in sheet_df.columns and sheet_df['代號'].iloc[0] != "-":
-                                sheet_df['當日量(張)'] = pd.to_numeric(sheet_df['當日量(張)'], errors='coerce').fillna(0)
-                                sheet_df = sheet_df[sheet_df['當日量(張)'] >= vol_threshold]
+                            # 🛡️ 加入防空包彈檢測 (避免 sheet_df 為空時當機)
+                            if not sheet_df.empty:
+                                # 🌟 讀取前 6 個有效欄位 (包含新加入的成交量)
+                                if len(sheet_df.columns) >= 6:
+                                    sheet_df = sheet_df.iloc[:, :6]
+                                
+                                # 在前端做一次排序
+                                if '代號' in sheet_df.columns:
+                                    sheet_df = sheet_df.sort_values('代號').reset_index(drop=True)
+                                
+                                # 🌟 執行前端動態成交量過濾
+                                if '當日量(張)' in sheet_df.columns and str(sheet_df['代號'].iloc[0]) != "-":
+                                    sheet_df['當日量(張)'] = pd.to_numeric(sheet_df['當日量(張)'], errors='coerce').fillna(0)
+                                    sheet_df = sheet_df[sheet_df['當日量(張)'] >= vol_threshold]
                             
                             # 計算總檔數
                             total_count = len(sheet_df)
-                            if total_count == 1 and sheet_df['代號'].iloc[0] == "-":
+                            if total_count > 0 and str(sheet_df['代號'].iloc[0]) == "-":
                                 total_count = 0
                             
                             # 顯示資料表 (更新為包含成交量條件的提示詞)
                             st.success(f"✅ 讀取成功！符合【當日價>10sma 10%以內 & 5/10均線乖離 < 4%】且【量大於 5日均量 1.3 倍 & 當日量 {vol_option}】之標的： 共 **{total_count}** 檔")
                             
                             # 將數字格式化，避免顯示小數點
-                            if '當日量(張)' in sheet_df.columns:
+                            if '當日量(張)' in sheet_df.columns and total_count > 0:
                                 st.dataframe(sheet_df.style.format({'當日量(張)': "{:,.0f}"}), use_container_width=True, hide_index=True)
                             else:
                                 st.dataframe(sheet_df, use_container_width=True, hide_index=True)
